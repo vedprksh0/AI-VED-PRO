@@ -4,107 +4,94 @@ from tavily import TavilyClient
 from supabase import create_client, Client
 import os
 
-# --- 1. SEO & PAGE CONFIG (Google Search ke liye) ---
-st.set_page_config(
-    page_title="Ai Ved Pro | Bihar's First Smart AI Chatbot",
-    page_icon="🤖",
-    layout="wide",
-)
+# --- 1. NEXT-GEN UI & SEO ---
+st.set_page_config(page_title="Ai Ved Pro | Multi-Engine AI", page_icon="⚡", layout="wide")
 
-# Google Metadata (Taaki Google ise pehchane)
 st.markdown("""
     <head>
-        <meta name="description" content="Ai Ved Pro is Bihar's first AI chatbot for JEE, BSEB students. Built by Ved from Dharupur, Bihar.">
-        <meta name="keywords" content="Ai Ved, Ai Ved Pro, Bihar AI, Ved AI, Dharupur AI, Best AI for JEE students">
+        <meta name="description" content="Ai Ved Pro - Integrated AI Architecture.">
+        <meta name="google-site-verification" content="<meta name="google-site-verification" content="Jt9DVZe2CIYVCVioXQBo-pO_mWQF-v0Lirpha0NE74A" />
     </head>
+    <style>
+        .stApp { background-color: #0E1117; color: #FFFFFF; }
+        .stButton>button { border: 2px solid #00F2FF; background: transparent; color: #00F2FF; border-radius: 15px; }
+        .stButton>button:hover { background: #00F2FF !important; color: #000 !important; box-shadow: 0 0 20px #00F2FF; }
+    </style>
 """, unsafe_allow_html=True)
 
-# --- 2. DATABASE & API CONNECTIONS ---
-# Iske liye tumhare Streamlit Secrets mein saari Keys honi chahiye
-url = st.secrets["SUPABASE_URL"]
-key = st.secrets["SUPABASE_KEY"]
+# --- 2. CONNECTIONS ---
+url, key = st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
 supabase: Client = create_client(url, key)
 tavily = TavilyClient(api_key=st.secrets["TAVILY_API_KEY"])
 groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# --- 3. SESSION STATE ---
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "user_email" not in st.session_state:
-    st.session_state.user_email = ""
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# --- 3. SESSION & AUTH ---
+if "logged_in" not in st.session_state: st.session_state.logged_in = False
+if "messages" not in st.session_state: st.session_state.messages = []
 
-# --- 4. LOGIN / SIGNUP LOGIC ---
-def login_user(email, password):
+def login_user(e, p):
     try:
-        res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        supabase.auth.sign_in_with_password({"email": e, "password": p})
         st.session_state.logged_in = True
-        st.session_state.user_email = email
         st.rerun()
-    except:
-        st.error("Login Fail: Email ya Password galat hai!")
+    except: st.error("Access Denied: Invalid Credentials")
 
-def signup_user(email, password):
-    try:
-        res = supabase.auth.sign_up({"email": email, "password": password})
-        st.success("Account ban gaya! Ab Login karo.")
-    except Exception as e:
-        st.error(f"Sign-up Fail: {e}")
-
-# --- 5. UI LOGIC ---
+# --- 4. INTERFACE ---
 if not st.session_state.logged_in:
-    st.title("🔐 Ai Ved - Welcome Area")
-    tab1, tab2 = st.tabs(["Login", "Sign-up"])
-    
-    with tab1:
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        if st.button("Login"):
-            login_user(email, password)
-            
-    with tab2:
-        new_email = st.text_input("Naya Email")
-        new_password = st.text_input("Naya Password", type="password")
-        if st.button("Create Account"):
-            signup_user(new_email, new_password)
+    st.title("🛡️ Ai Ved Pro - Security Portal")
+    t1, t2 = st.tabs(["Authorize", "Register"])
+    with t1:
+        e, p = st.text_input("Email"), st.text_input("Password", type="password")
+        if st.button("Unlock System"): login_user(e, p)
+    with t2:
+        ne, np = st.text_input("New Email"), st.text_input("New Password", type="password")
+        if st.button("Create Digital Identity"):
+            supabase.auth.sign_up({"email": ne, "password": np})
+            st.success("Identity Created. Log in now.")
 
 else:
-    # --- ASLI AI DASHBOARD (LOGIN HONE KE BAAD) ---
-    st.sidebar.title(f"👋 Welcome, {st.session_state.user_email}")
-    if st.sidebar.button("Logout"):
+    # --- PRO SIDEBAR (MODES SELECTION) ---
+    st.sidebar.title("🎮 Engine Control")
+    mode = st.sidebar.radio("Select Mode:", 
+        ["Simple Chat (Fast)", "High Chat (Smart)", "Deep Web Search", "Image Studio (Neon)"])
+    
+    if st.sidebar.button("Terminate Session"):
         st.session_state.logged_in = False
-        st.session_state.messages = []
         st.rerun()
 
-    st.title("🤖 Ai Ved Pro - Bihar's Smartest AI")
-    st.info("Main abhi Internet (Tavily) se bhi juda hoon aur Groq se bhi!")
-
-    # Chat History dikhao
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    # Chat Input
-    user_input = st.chat_input("Pucho bhai, kya jaanna hai?")
+    st.title(f"⚡ {mode}")
     
-    if user_input:
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.markdown(user_input)
+    # Message Display
+    for m in st.session_state.messages:
+        with st.chat_message(m["role"]): st.markdown(m["content"])
+
+    if prompt := st.chat_input("Input command..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"): st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("Ved bhai, ruko... internet par dhoond raha hoon..."):
-                # 1. Search on Internet (Tavily)
-                search_result = tavily.search(query=user_input, search_depth="advanced")
-                context = search_result['results']
-                
-                # 2. Generate Answer with Groq
-                prompt = f"System: Use this context to answer: {context}\nUser: {user_input}"
-                completion = groq_client.chat.completions.create(
-                    model="llama3-8b-8192",
-                    messages=[{"role": "user", "content": prompt}]
-                )
-                response = completion.choices[0].message.content
-                st.markdown(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
+            # --- FEATURE 1: SIMPLE CHAT (Fast & Direct) ---
+            if mode == "Simple Chat (Fast)":
+                res = groq_client.chat.completions.create(model="llama3-8b-8192", messages=[{"role":"user","content":prompt}])
+                response = res.choices[0].message.content
+
+            # --- FEATURE 2: HIGH CHAT (Deep Reasoning) ---
+            elif mode == "High Chat (Smart)":
+                res = groq_client.chat.completions.create(model="llama3-70b-8192", messages=[{"role":"user","content":prompt}])
+                response = res.choices[0].message.content
+
+            # --- FEATURE 3: DEEP WEB SEARCH (Tavily + Groq) ---
+            elif mode == "Deep Web Search":
+                with st.status("Scanning global data nodes...", expanded=False) as s:
+                    data = tavily.search(query=prompt, search_depth="advanced")['results']
+                    s.update(label="Intelligence Synthesized", state="complete")
+                res = groq_client.chat.completions.create(model="llama3-70b-8192", messages=[{"role":"user","content":f"Context: {data}\nQuery: {prompt}"}])
+                response = res.choices[0].message.content
+
+            # --- FEATURE 4: IMAGE STUDIO (Using Placeholder/API) ---
+            elif mode == "Image Studio (Neon)":
+                response = f"🎨 Generating neon visual for: **{prompt}**\n\n*(Note: Bhai, image API yahan connect kar sakte ho, abhi main placeholder generate kar raha hoon)*"
+                st.image(f"https://pollinations.ai/p/{prompt.replace(' ', '%20')}?width=1024&height=1024&seed=42&model=flux")
+
+            st.markdown(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
