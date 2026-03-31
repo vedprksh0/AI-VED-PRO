@@ -12,31 +12,54 @@ st.markdown("""
 [data-testid="stSidebarNav"] { display: none; }
 
 .sidebar-title {
-    font-size: 22px;
+    font-size: 24px;
     font-weight: bold;
     padding: 10px 0;
-}
-
-.chat-btn button {
-    width: 100%;
-    text-align: left;
-    background: #212121;
-    border: 1px solid #333;
-    margin-bottom: 5px;
 }
 
 .block-container {
     max-width: 900px;
     margin: auto;
 }
+
+footer {
+    position: fixed;
+    bottom: 10px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    color: #888;
+    font-size: 13px;
+}
 </style>
 """, unsafe_allow_html=True)
+
+# --- FOOTER ---
+st.markdown("<footer>Built by Ved Prakash • Since 2026</footer>", unsafe_allow_html=True)
+
+# --- SYSTEM PROMPT ---
+SYSTEM_PROMPT = """
+You are a smart, human-like AI.
+
+- Talk naturally like a real person
+- Detect user language automatically (Hindi, English, Hinglish)
+- Reply in same language
+- Keep answers simple, helpful, friendly
+- Never sound robotic
+- Don't guess facts
+- If unsure, say honestly
+
+For search:
+- Use provided data only
+- Give latest accurate info
+- Explain like a human friend
+"""
 
 # --- API ---
 groq = Groq(api_key=st.secrets["GROQ_API_KEY"])
 tavily = TavilyClient(api_key=st.secrets["TAVILY_API_KEY"])
 
-# --- SESSION STATE ---
+# --- SESSION ---
 if "chats" not in st.session_state:
     st.session_state.chats = {"Chat 1": []}
 
@@ -44,7 +67,7 @@ if "current_chat" not in st.session_state:
     st.session_state.current_chat = "Chat 1"
 
 if "mode" not in st.session_state:
-    st.session_state.mode = "chat"   # chat / search / image
+    st.session_state.mode = "chat"
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -60,13 +83,12 @@ with st.sidebar:
     st.write("### Modes")
     if st.button("💬 Chat"):
         st.session_state.mode = "chat"; st.rerun()
-    if st.button("🔍 Deep Search"):
+    if st.button("🔍 Real-Time Search"):
         st.session_state.mode = "search"; st.rerun()
-    if st.button("🎨 Image"):
+    if st.button("🎨 Image Generator"):
         st.session_state.mode = "image"; st.rerun()
 
     st.write("### Your Chats")
-
     for chat in st.session_state.chats:
         if st.button(chat):
             st.session_state.current_chat = chat
@@ -75,7 +97,7 @@ with st.sidebar:
 # --- MAIN ---
 chat_history = st.session_state.chats[st.session_state.current_chat]
 
-# --- SHOW HISTORY ---
+# SHOW HISTORY
 for msg in chat_history:
     st.chat_message(msg["role"]).write(msg["content"])
 
@@ -90,10 +112,15 @@ if st.session_state.mode == "chat":
         try:
             res = groq.chat.completions.create(
                 model="llama-3.3-70b-versatile",
-                messages=chat_history
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    *chat_history
+                ]
             )
+
             reply = res.choices[0].message.content
             chat_history.append({"role": "assistant", "content": reply})
+
             st.chat_message("assistant").write(reply)
 
         except Exception as e:
@@ -101,21 +128,33 @@ if st.session_state.mode == "chat":
 
 # --- SEARCH MODE ---
 elif st.session_state.mode == "search":
-    prompt = st.chat_input("Search anything...")
+    prompt = st.chat_input("Search latest news...")
 
     if prompt:
         st.chat_message("user").write(prompt)
 
         try:
-            with st.spinner("🔎 Searching web..."):
-                results = tavily.search(query=prompt, search_depth="advanced")["results"][:3]
+            with st.spinner("🌍 Getting latest updates..."):
+                results = tavily.search(
+                    query=prompt + " latest news",
+                    search_depth="advanced"
+                )["results"][:5]
 
             res = groq.chat.completions.create(
                 model="llama-3.3-70b-versatile",
-                messages=[{
-                    "role": "user",
-                    "content": f"Context: {results}\nQuery: {prompt}"
-                }]
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": f"""
+Use this real-time data:
+
+{results}
+
+Question: {prompt}
+"""
+                    }
+                ]
             )
 
             reply = res.choices[0].message.content
