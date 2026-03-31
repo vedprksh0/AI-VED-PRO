@@ -3,7 +3,7 @@ from groq import Groq
 from tavily import TavilyClient
 
 # --- CONFIG ---
-st.set_page_config(page_title="Ai Ved Pro", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="Ai Ved", page_icon="⚡", layout="wide")
 
 # --- STYLE ---
 st.markdown("""
@@ -11,22 +11,12 @@ st.markdown("""
 .stApp { background-color: #0E1117; color: white; }
 [data-testid="stSidebarNav"] { display: none; }
 
-.sidebar-title {
-    font-size: 24px;
-    font-weight: bold;
-    padding: 10px 0;
-}
-
-.block-container {
-    max-width: 900px;
-    margin: auto;
-}
+.block-container { max-width: 900px; margin: auto; }
 
 footer {
     position: fixed;
     bottom: 10px;
-    left: 0;
-    right: 0;
+    width: 100%;
     text-align: center;
     color: #888;
     font-size: 13px;
@@ -34,25 +24,17 @@ footer {
 </style>
 """, unsafe_allow_html=True)
 
-# --- FOOTER ---
 st.markdown("<footer>Built by Ved Prakash • Since 2026</footer>", unsafe_allow_html=True)
 
 # --- SYSTEM PROMPT ---
 SYSTEM_PROMPT = """
-You are a smart, human-like AI.
+You are a human-like AI assistant.
 
-- Talk naturally like a real person
-- Detect user language automatically (Hindi, English, Hinglish)
-- Reply in same language
-- Keep answers simple, helpful, friendly
-- Never sound robotic
-- Don't guess facts
-- If unsure, say honestly
-
-For search:
-- Use provided data only
-- Give latest accurate info
-- Explain like a human friend
+- Speak naturally like a real person
+- Match user's language (Hindi / Hinglish / English)
+- Never say you lack real-time data
+- If context given → treat it as LIVE info
+- Be confident, helpful, and conversational
 """
 
 # --- API ---
@@ -71,27 +53,24 @@ if "mode" not in st.session_state:
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.markdown('<div class="sidebar-title">⚡ Ai Ved</div>', unsafe_allow_html=True)
+    st.title("⚡ Ai Ved")
 
     if st.button("+ New Chat"):
-        new_chat = f"Chat {len(st.session_state.chats)+1}"
-        st.session_state.chats[new_chat] = []
-        st.session_state.current_chat = new_chat
+        name = f"Chat {len(st.session_state.chats)+1}"
+        st.session_state.chats[name] = []
+        st.session_state.current_chat = name
         st.session_state.mode = "chat"
         st.rerun()
 
     st.write("### Modes")
-    if st.button("💬 Chat"):
-        st.session_state.mode = "chat"; st.rerun()
-    if st.button("🔍 Real-Time Search"):
-        st.session_state.mode = "search"; st.rerun()
-    if st.button("🎨 Image Generator"):
-        st.session_state.mode = "image"; st.rerun()
+    if st.button("💬 Chat"): st.session_state.mode = "chat"; st.rerun()
+    if st.button("🔍 Real-Time Search"): st.session_state.mode = "search"; st.rerun()
+    if st.button("🎨 Image"): st.session_state.mode = "image"; st.rerun()
 
     st.write("### Your Chats")
-    for chat in st.session_state.chats:
-        if st.button(chat):
-            st.session_state.current_chat = chat
+    for c in st.session_state.chats:
+        if st.button(c):
+            st.session_state.current_chat = c
             st.rerun()
 
 # --- MAIN ---
@@ -100,6 +79,11 @@ chat_history = st.session_state.chats[st.session_state.current_chat]
 # SHOW HISTORY
 for msg in chat_history:
     st.chat_message(msg["role"]).write(msg["content"])
+
+# --- STREAMING FUNCTION ---
+def stream_text(text):
+    for i in range(len(text)):
+        yield text[:i+1]
 
 # --- CHAT MODE ---
 if st.session_state.mode == "chat":
@@ -112,16 +96,13 @@ if st.session_state.mode == "chat":
         try:
             res = groq.chat.completions.create(
                 model="llama-3.3-70b-versatile",
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    *chat_history
-                ]
+                messages=[{"role": "system", "content": SYSTEM_PROMPT}, *chat_history]
             )
 
             reply = res.choices[0].message.content
             chat_history.append({"role": "assistant", "content": reply})
 
-            st.chat_message("assistant").write(reply)
+            st.chat_message("assistant").write_stream(stream_text(reply))
 
         except Exception as e:
             st.error(str(e))
@@ -134,9 +115,9 @@ elif st.session_state.mode == "search":
         st.chat_message("user").write(prompt)
 
         try:
-            with st.spinner("🌍 Getting latest updates..."):
+            with st.spinner("🌍 Searching live data..."):
                 results = tavily.search(
-                    query=prompt + " latest news",
+                    query=prompt + " latest news 2026",
                     search_depth="advanced"
                 )["results"][:5]
 
@@ -147,18 +128,19 @@ elif st.session_state.mode == "search":
                     {
                         "role": "user",
                         "content": f"""
-Use this real-time data:
-
+LIVE DATA:
 {results}
 
-Question: {prompt}
+User: {prompt}
+
+Answer naturally using this data.
 """
                     }
                 ]
             )
 
             reply = res.choices[0].message.content
-            st.chat_message("assistant").write(reply)
+            st.chat_message("assistant").write_stream(stream_text(reply))
 
         except Exception as e:
             st.error(str(e))
