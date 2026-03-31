@@ -3,7 +3,7 @@ from groq import Groq
 from tavily import TavilyClient
 from supabase import create_client, Client
 
-# --- 1. SEO & GOOGLE VERIFICATION ---
+# --- 1. SEO & GOOGLE VERIFICATION (TERA CODE) ---
 st.set_page_config(page_title="Ai Ved Pro", page_icon="⚡", layout="wide")
 
 st.markdown(f"""
@@ -16,23 +16,9 @@ st.markdown(f"""
         .sidebar-title {{ font-size: 26px; font-weight: bold; padding: 20px 0px; color: #10a37f; }}
         .stButton>button {{ width: 100%; border-radius: 8px; border: 1px solid #333; background: #1A1A1A; color: white; text-align: left; }}
         .stButton>button:hover {{ border-color: #10a37f; background: #2D2D2D !important; }}
-        
-        /* FIXED DISCLAIMER AT BOTTOM */
-        .fixed-disclaimer {{
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background-color: #0E1117;
-            color: #777;
-            text-align: center;
-            font-size: 11px;
-            padding: 10px 0;
-            z-index: 999;
-            border-top: 1px solid #222;
-        }}
+        .fixed-disclaimer {{ position: fixed; bottom: 0; left: 0; width: 100%; background-color: #0E1117; color: #777; text-align: center; font-size: 11px; padding: 10px 0; z-index: 999; border-top: 1px solid #222; }}
         .footer-text {{ position: fixed; bottom: 60px; left: 20px; font-size: 12px; color: #555; }}
-        .main-container {{ padding-bottom: 100px; }} /* Space for disclaimer */
+        .history-item {{ font-size: 13px; color: #aaa; padding: 5px 0; border-bottom: 1px solid #222; }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -42,10 +28,11 @@ supabase: Client = create_client(url, key)
 tavily = TavilyClient(api_key=st.secrets["TAVILY_API_KEY"])
 groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# --- 3. SESSION STATE (MEMORY) ---
+# --- 3. SESSION STATE (MEMORY & HISTORY) ---
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "page" not in st.session_state: st.session_state.page = "Chat"
 if "messages" not in st.session_state: st.session_state.messages = [] 
+if "search_history" not in st.session_state: st.session_state.search_history = [] # Search history store
 
 # --- 4. LOGIN ---
 if not st.session_state.logged_in:
@@ -68,7 +55,14 @@ else:
         if st.button("💬 Ask Ai Ved"): st.session_state.page = "Chat"; st.rerun()
         if st.button("🔍 Real-Time Search"): st.session_state.page = "Search"; st.rerun()
         if st.button("🎨 Image Studio"): st.session_state.page = "Image"; st.rerun()
-        st.divider()
+        
+        st.write("---")
+        st.subheader("Recent Searches")
+        # Display Search History in Sidebar
+        for item in reversed(st.session_state.search_history[-5:]): # Last 5 searches
+            st.markdown(f'<div class="history-item">🔍 {item}</div>', unsafe_allow_html=True)
+        
+        st.write("---")
         if st.button("+ New Chat"):
             st.session_state.messages = []
             st.rerun()
@@ -77,46 +71,42 @@ else:
             st.rerun()
         st.markdown(f"""<div class="footer-text">Since 2026<br><b>Built by Ved Prakash</b></div>""", unsafe_allow_html=True)
 
-    # --- CHAT ENGINE (FIXED HISTORY) ---
+    # --- CHAT ENGINE ---
     if st.session_state.page == "Chat":
         st.title("Ask Ai Ved")
-        
-        # Displaying chat history
         chat_container = st.container()
         with chat_container:
             for message in st.session_state.messages:
-                with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
+                with st.chat_message(message["role"]): st.markdown(message["content"])
 
         if prompt := st.chat_input("How can I help you today?"):
             st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user"):
-                st.markdown(prompt)
+            st.session_state.search_history.append(prompt) # Saving to history
+            with st.chat_message("user"): st.markdown(prompt)
 
             with st.chat_message("assistant"):
-                # Always passing full history to AI for better memory
                 history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
                 response = groq_client.chat.completions.create(model="llama-3.1-8b-instant", messages=history)
                 full_res = response.choices[0].message.content
                 st.markdown(full_res)
             st.session_state.messages.append({"role": "assistant", "content": full_res})
-            st.rerun() # Refresh to keep history in view
+            st.rerun()
 
-    # --- REAL-TIME SEARCH (ULTRA FRESH) ---
+    # --- REAL-TIME SEARCH ---
     elif st.session_state.page == "Search":
         st.title("Real-Time Web Search")
-        search_query = st.chat_input("Search live news, weather, or events...")
+        search_query = st.chat_input("Search live news...")
         if search_query:
+            st.session_state.search_history.append(search_query) # Saving search query
             with st.spinner("Accessing global web data..."):
-                # Advanced search for ultra-fresh results
                 results = tavily.search(query=search_query, search_depth="advanced", max_results=5)
                 context = "\n".join([f"Source {i+1}: {r['content']}" for i, r in enumerate(results['results'])])
             
             with st.chat_message("assistant"):
                 res = groq_client.chat.completions.create(
                     model="llama-3.1-8b-instant",
-                    messages=[{"role": "system", "content": "You are Ai Ved. Use ONLY the provided fresh web context to answer accurately."},
-                              {"role": "user", "content": f"Live Web Data: {context}\n\nUser Query: {search_query}"}]
+                    messages=[{"role": "system", "content": "Use provided context to answer."},
+                              {"role": "user", "content": f"Context: {context}\n\nQuestion: {search_query}"}]
                 )
                 st.markdown(res.choices[0].message.content)
 
@@ -125,9 +115,9 @@ else:
         st.title("Image Studio")
         img_desc = st.text_input("Describe your art...")
         if st.button("Generate Art"):
-            with st.spinner("Painting your imagination..."):
+            st.session_state.search_history.append(img_desc) # Saving prompt
+            with st.spinner("Painting..."):
                 url = f"https://pollinations.ai/p/{img_desc.replace(' ', '%20')}?width=1024&height=1024&seed=42&model=flux"
                 st.image(url, caption=f"Result: {img_desc}")
 
-    # --- FIXED DISCLAIMER AT THE VERY BOTTOM ---
     st.markdown('<div class="fixed-disclaimer">Ai Ved can make mistakes. Check important info.</div>', unsafe_allow_html=True)
