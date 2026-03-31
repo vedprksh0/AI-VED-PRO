@@ -5,7 +5,7 @@ from tavily import TavilyClient
 # --- CONFIG ---
 st.set_page_config(page_title="AI Ved", page_icon="⚡", layout="wide")
 
-# --- STYLE (CHATGPT LIKE) ---
+# --- STYLE ---
 st.markdown("""
 <style>
 .stApp { background-color: #0B0F19; color: #ECECF1; }
@@ -22,11 +22,12 @@ section[data-testid="stSidebar"] {
     background-color: #111827;
 }
 
-/* Footer */
-footer {
+/* Footer fix */
+.footer {
     position: fixed;
     bottom: 8px;
-    width: 100%;
+    left: 0;
+    right: 0;
     text-align: center;
     color: #888;
     font-size: 12px;
@@ -34,7 +35,11 @@ footer {
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("<footer>AI Ved can make mistakes. Check important info.</footer>", unsafe_allow_html=True)
+# --- FOOTER (FIXED) ---
+st.markdown('<div class="footer">AI Ved can make mistakes. Check important info.</div>', unsafe_allow_html=True)
+
+# --- TITLE (IMPORTANT FIX) ---
+st.markdown("<h2 style='text-align:center;'>⚡ AI Ved</h2>", unsafe_allow_html=True)
 
 # --- API ---
 groq = Groq(api_key=st.secrets["GROQ_API_KEY"])
@@ -43,10 +48,10 @@ tavily = TavilyClient(api_key=st.secrets["TAVILY_API_KEY"])
 # --- SYSTEM PROMPT ---
 SYSTEM_PROMPT = """
 Talk like a real human.
-Reply in user's language (Hindi / Hinglish / English).
-Keep it short, natural, non-robotic.
+Reply in user's language (Hindi/Hinglish/English).
+Keep it short and natural.
 Don't repeat.
-Don't mention limitations.
+Don't give fake info.
 """
 
 # --- SESSION ---
@@ -63,7 +68,6 @@ if "mode" not in st.session_state:
 with st.sidebar:
     st.title("⚡ AI Ved")
 
-    # New Chat
     if st.button("+ New chat"):
         name = f"Chat {len(st.session_state.chats)+1}"
         st.session_state.chats[name] = []
@@ -72,13 +76,16 @@ with st.sidebar:
         st.rerun()
 
     st.write("### Modes")
+
     if st.button("💬 Chat"):
-        st.session_state.mode = "chat"; st.rerun()
+        st.session_state.mode = "chat"
+        st.rerun()
 
-    if st.button("🔍 Search"):
-        st.session_state.mode = "search"; st.rerun()
+    if st.button("🔍 Real-Time Search"):
+        st.session_state.mode = "search"
+        st.rerun()
 
-    st.write("### Chats")
+    st.write("### Your Chats")
 
     for chat in st.session_state.chats:
         if st.button(chat):
@@ -100,7 +107,7 @@ if prompt:
     st.chat_message("user").write(prompt)
 
     try:
-        # --- CHAT MODE ---
+        # --- NORMAL CHAT ---
         if st.session_state.mode == "chat":
             res = groq.chat.completions.create(
                 model="llama-3.3-70b-versatile",
@@ -110,26 +117,36 @@ if prompt:
             )
             reply = res.choices[0].message.content.strip()
 
-        # --- SEARCH MODE ---
+        # --- REAL-TIME SEARCH ---
         else:
             with st.spinner(""):
                 results = tavily.search(
-                    query=prompt + " latest news",
+                    query=prompt + " latest news india today",
                     search_depth="advanced"
-                )["results"][:3]
+                )["results"][:5]
 
             res = groq.chat.completions.create(
                 model="llama-3.3-70b-versatile",
                 messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {
+                        "role": "system",
+                        "content": """
+You are a real-time news assistant.
+
+- Use only given data
+- No fake news
+- Give latest real info
+- Talk like human (Hindi/Hinglish)
+"""
+                    },
                     {
                         "role": "user",
-                        "content": f"Use this live data:\n{results}\nAnswer naturally."
+                        "content": f"DATA:\n{results}\n\nQuestion: {prompt}"
                     }
                 ],
-                temperature=0.7,
-                max_tokens=500
+                temperature=0.5
             )
+
             reply = res.choices[0].message.content.strip()
 
         chat_history.append({"role": "assistant", "content": reply})
