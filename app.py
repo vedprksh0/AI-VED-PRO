@@ -40,7 +40,7 @@ genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
-# --- SMART SEARCH (NEWS FIXED) ---
+# --- SEARCH (FIXED NO EMPTY) ---
 def real_search(query):
     try:
         q = query.lower()
@@ -49,52 +49,37 @@ def real_search(query):
         if "nrews" in q:
             q = q.replace("nrews", "news")
 
-        # force news intent
-        if any(k in q for k in ["news", "war", "iran", "israel", "breaking"]):
-            search_query = f"{q} latest breaking news 2026"
-        else:
-            search_query = q
+        search_query = f"{q} latest news 2026"
 
         with DDGS() as ddgs:
-            results = ddgs.text(search_query, max_results=8)
+            results = list(ddgs.text(search_query, max_results=5))
 
-        return results
+        if not results:
+            return "No data"
+
+        return "\n".join([r.get("body", "") for r in results])
 
     except:
-        return []
-
-# --- NEWS CARDS UI ---
-def show_news_cards(results):
-    for r in results:
-        title = r.get("title", "No title")
-        body = r.get("body", "")
-        link = r.get("href", "#")
-
-        st.markdown(f"""
-        <div class="card">
-            <b>{title}</b><br>
-            <small>{body}</small><br><br>
-            <a href="{link}" target="_blank">Read more</a>
-        </div>
-        """, unsafe_allow_html=True)
+        return "No data"
 
 # --- IMAGE ---
 def generate_image(prompt):
     return f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
 
-# --- TURBO AI ---
+# --- AI ENGINE (ALWAYS RESPONSE) ---
 def karzon_turbo(query):
-    results = real_search(query)
-    context = "\n".join([r.get("body", "") for r in results])
+    context = real_search(query)
 
     prompt = f"""
-    You are a LIVE NEWS AI.
+    You are Karzon AI.
 
-    - Give only latest real information
-    - Ignore grammar or dictionary text
-    - Give short bullet points
+    RULES:
+    - Always reply (never empty)
+    - If no data → answer from your knowledge
+    - Reply in same language as user
+    - Prefer Hinglish + English
 
-    Data:
+    Context:
     {context}
 
     Question:
@@ -112,7 +97,7 @@ def karzon_turbo(query):
             model = genai.GenerativeModel('gemini-1.5-flash')
             return model.generate_content(prompt).text
         except:
-            return context
+            return "Server busy. Try again."
 
 # --- SESSION ---
 if "login" not in st.session_state:
@@ -197,18 +182,13 @@ else:
             st.session_state.messages.append({"role": "assistant", "content": full})
             st.rerun()
 
-    # --- NEWS MODE (CARDS + AUTO REFRESH) ---
+    # --- NEWS ---
     elif st.session_state.mode == "news":
-        query = st.text_input("Search news", "latest news")
+        query = st.text_input("Search news")
 
-        results = real_search(query)
-
-        if results:
-            show_news_cards(results)
-
-        # 🔄 auto refresh every 30 sec
-        time.sleep(30)
-        st.rerun()
+        if query:
+            result = karzon_turbo(query)
+            st.write(result)
 
     # --- IMAGE ---
     elif st.session_state.mode == "image":
