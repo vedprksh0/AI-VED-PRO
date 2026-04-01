@@ -3,6 +3,4 @@ groq
 duckduckgo_search
 supabase
 google-generativeai
-streamlit-webrtc
 SpeechRecognition
-pyaudio
