@@ -3,7 +3,6 @@ from groq import Groq
 from duckduckgo_search import DDGS
 from supabase import create_client, Client
 import google.generativeai as genai
-import speech_recognition as sr
 
 # --- CONFIG ---
 st.set_page_config(page_title="Karzon AI", layout="wide")
@@ -55,10 +54,11 @@ def generate_image(prompt):
     except:
         return "Image generation failed."
 
-# --- VOICE ---
+# --- VOICE (SAFE VERSION - NO CRASH) ---
 def voice_to_text():
-    r = sr.Recognizer()
     try:
+        import speech_recognition as sr
+        r = sr.Recognizer()
         with sr.Microphone() as source:
             audio = r.listen(source, timeout=5)
             return r.recognize_google(audio)
@@ -117,7 +117,7 @@ if not st.session_state.login:
         except:
             st.error("Login failed")
 
-# --- MAIN ---
+# --- MAIN APP ---
 else:
     with st.sidebar:
         st.markdown("## Karzon AI")
@@ -125,23 +125,27 @@ else:
         if st.button("➕ New Chat"):
             st.session_state.messages = []
 
-        st.markdown("### Search")
+        # SEARCH
+        st.markdown("### 🔍 Search")
         search_q = st.text_input("Search anything")
         if search_q:
             st.write(real_search(search_q))
 
-        st.markdown("### Image Creation")
+        # IMAGE
+        st.markdown("### 🎨 Image Creation")
         img_prompt = st.text_input("Describe image")
         if st.button("Generate Image"):
             st.write(generate_image(img_prompt))
 
-        st.markdown("### Voice")
+        # VOICE
+        st.markdown("### Voice Input")
         if st.button("Start Voice Input"):
             text = voice_to_text()
             if text:
                 st.session_state.messages.append({"role": "user", "content": text})
                 st.rerun()
 
+        # HISTORY
         st.markdown("### Your Chats")
         for m in st.session_state.messages[-5:]:
             if m["role"] == "user":
@@ -151,16 +155,17 @@ else:
             st.session_state.login = False
             st.rerun()
 
+    # HEADER
     st.markdown('<div class="header">Karzon AI</div>', unsafe_allow_html=True)
 
-    # chat
+    # CHAT
     for msg in st.session_state.messages:
         if msg["role"] == "user":
             st.markdown(f'<div class="chat-msg user-msg">{msg["content"]}</div>', unsafe_allow_html=True)
         else:
             st.markdown(f'<div class="chat-msg ai-msg">{msg["content"]}</div>', unsafe_allow_html=True)
 
-    # input
+    # INPUT
     if prompt := st.chat_input("Ask anything..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
 
@@ -170,4 +175,5 @@ else:
         st.session_state.messages.append({"role": "assistant", "content": reply})
         st.rerun()
 
+# FOOTER
 st.markdown('<div class="footer">© 2026 KARZON AI - VED PRAKASH</div>', unsafe_allow_html=True)
