@@ -1,10 +1,8 @@
 import streamlit as st
 from groq import Groq
+from duckduckgo_search import DDGS
 from supabase import create_client, Client
 import google.generativeai as genai
-from duckduckgo_search import DDGS
-import requests
-from bs4 import BeautifulSoup
 import time
 
 # --- CONFIG ---
@@ -15,10 +13,25 @@ st.markdown("""
 <style>
 .stApp { background:#0E1117; color:#E6EDF3; }
 .chat-container { width:70%; margin:auto; }
-.chat-msg { padding:14px; border-radius:10px; margin-bottom:12px; }
+
+.chat-msg {
+    padding:14px;
+    border-radius:10px;
+    margin-bottom:12px;
+}
 .user-msg { background:#21262D; text-align:right; }
 .ai-msg { background:#161B22; }
+
+.card {
+    background:#161B22;
+    padding:15px;
+    border-radius:10px;
+    margin-bottom:10px;
+    border:1px solid #30363D;
+}
+
 .header { text-align:center; font-size:26px; font-weight:700; }
+.footer { text-align:center; font-size:11px; color:#8B949E; margin-top:20px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -27,107 +40,79 @@ genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
-# --- CACHE SEARCH ---
-@st.cache_data(ttl=600)
-def ddg_search(query):
+# --- SEARCH (FIXED NO EMPTY) ---
+def real_search(query):
     try:
+        q = query.lower()
+
+        # typo fix
+        if "nrews" in q:
+            q = q.replace("nrews", "news")
+
+        search_query = f"{q} latest news 2026"
+
         with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=5))
-        return [r.get("body", "") for r in results]
+            results = list(ddgs.text(search_query, max_results=5))
+
+        if not results:
+            return "No data"
+
+        return "\n".join([r.get("body", "") for r in results])
+
     except:
-        return []
-
-# --- SCRAPING SEARCH ---
-@st.cache_data(ttl=600)
-def scrape_google(query):
-    try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        url = f"https://www.google.com/search?q={query}"
-        res = requests.get(url, headers=headers)
-        soup = BeautifulSoup(res.text, "html.parser")
-
-        texts = []
-        for g in soup.find_all("div"):
-            t = g.get_text()
-            if len(t) > 80:
-                texts.append(t)
-
-        return texts[:5]
-    except:
-        return []
-
-# --- KARZON TURBO SEARCH ---
-def karzon_search(query):
-    q = query.lower()
-
-    if "nrews" in q:
-        q = q.replace("nrews", "news")
-
-    if "news" in q:
-        q += " latest breaking news 2026"
-
-    data = []
-
-    # 1. scrape
-    data += scrape_google(q)
-
-    # 2. ddg backup
-    data += ddg_search(q)
-
-    if not data:
         return "No data"
 
-    return "\n".join(data[:8])
+# --- IMAGE ---
+def generate_image(prompt):
+    return f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
 
-# --- AI ENGINE ---
+# --- AI ENGINE (ALWAYS RESPONSE) ---
 def karzon_turbo(query):
-    context = karzon_search(query)
+    context = real_search(query)
 
     prompt = f"""
     You are Karzon AI.
 
-    - Always answer
-    - Clean useful info
-    - Ignore garbage text
-    - Reply in same language (Hinglish/English/Hindi)
+    RULES:
+    - Always reply (never empty)
+    - If no data → answer from your knowledge
+    - Reply in same language as user
+    - Prefer Hinglish + English
 
-    Data:
+    Context:
     {context}
 
     Question:
     {query}
     """
 
-    # GROQ
     try:
         res = groq_client.chat.completions.create(
             model="llama3-70b-8192",
             messages=[{"role": "user", "content": prompt}],
         )
-        if res.choices[0].message.content:
-            return res.choices[0].message.content
+        return res.choices[0].message.content
     except:
-        pass
-
-    # GEMINI
-    try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        return model.generate_content(prompt).text
-    except:
-        pass
-
-    # FINAL FALLBACK
-    return "Main available hoon 🙂 bolo kya help chahiye?"
+        try:
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            return model.generate_content(prompt).text
+        except:
+            return "Server busy. Try again."
 
 # --- SESSION ---
 if "login" not in st.session_state:
     st.session_state.login = False
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "mode" not in st.session_state:
+    st.session_state.mode = "chat"
+if "history" not in st.session_state:
+    st.session_state.history = []
 
 # --- LOGIN ---
 if not st.session_state.login:
     st.title("Karzon AI")
+
     email = st.text_input("Email")
     password = st.text_input("Password", type="password")
 
@@ -141,28 +126,74 @@ if not st.session_state.login:
 
 # --- MAIN ---
 else:
+    with st.sidebar:
+        st.markdown("## Karzon AI")
+
+        if st.button("💬 Chat"):
+            st.session_state.mode = "chat"
+
+        if st.button("📰 News"):
+            st.session_state.mode = "news"
+
+        if st.button("🎨 Image"):
+            st.session_state.mode = "image"
+
+        if st.button("➕ New Chat"):
+            if st.session_state.messages:
+                st.session_state.history.append(st.session_state.messages)
+            st.session_state.messages = []
+
+        st.markdown("### Your Chats")
+        for i, chat in enumerate(reversed(st.session_state.history)):
+            if st.button(f"Chat {i+1}"):
+                st.session_state.messages = chat
+                st.session_state.mode = "chat"
+                st.rerun()
+
+        if st.button("Logout"):
+            st.session_state.login = False
+            st.rerun()
+
     st.markdown('<div class="header">Karzon AI</div>', unsafe_allow_html=True)
 
-    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+    # --- CHAT ---
+    if st.session_state.mode == "chat":
+        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
 
-    for msg in st.session_state.messages:
-        cls = "user-msg" if msg["role"] == "user" else "ai-msg"
-        st.markdown(f'<div class="chat-msg {cls}">{msg["content"]}</div>', unsafe_allow_html=True)
+        for msg in st.session_state.messages:
+            cls = "user-msg" if msg["role"] == "user" else "ai-msg"
+            st.markdown(f'<div class="chat-msg {cls}">{msg["content"]}</div>', unsafe_allow_html=True)
 
-    st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    if prompt := st.chat_input("Ask anything..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        if prompt := st.chat_input("Ask anything..."):
+            st.session_state.messages.append({"role": "user", "content": prompt})
 
-        reply = karzon_turbo(prompt)
+            reply = karzon_turbo(prompt)
 
-        placeholder = st.empty()
-        full = ""
+            placeholder = st.empty()
+            full = ""
 
-        for word in reply.split():
-            full += word + " "
-            placeholder.markdown(full)
-            time.sleep(0.02)
+            for word in reply.split():
+                full += word + " "
+                placeholder.markdown(full)
+                time.sleep(0.02)
 
-        st.session_state.messages.append({"role": "assistant", "content": full})
-        st.rerun()
+            st.session_state.messages.append({"role": "assistant", "content": full})
+            st.rerun()
+
+    # --- NEWS ---
+    elif st.session_state.mode == "news":
+        query = st.text_input("Search news")
+
+        if query:
+            result = karzon_turbo(query)
+            st.write(result)
+
+    # --- IMAGE ---
+    elif st.session_state.mode == "image":
+        p = st.text_input("Describe image")
+        if st.button("Generate Image"):
+            st.image(generate_image(p), use_column_width=True)
+
+    st.markdown('<div class="footer">© 2026 KARZON AI - VED PRAKASH</div>', unsafe_allow_html=True)
