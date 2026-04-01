@@ -8,16 +8,42 @@ import time
 # --- CONFIG ---
 st.set_page_config(page_title="Karzon AI", layout="wide")
 
-# --- STYLE ---
+# --- STYLE (WHITE CLEAN UI) ---
 st.markdown("""
 <style>
 .stApp { background:#0E1117; color:#E6EDF3; }
+
 .chat-container { width:70%; margin:auto; }
-.chat-msg { padding:14px; border-radius:12px; margin-bottom:12px; }
-.user-msg { background:#238636; text-align:right; }
-.ai-msg { background:#161B22; }
-.header { text-align:center; font-size:26px; font-weight:700; }
-.footer { text-align:center; font-size:11px; color:#8B949E; margin-top:20px; }
+
+.chat-msg {
+    padding:14px;
+    border-radius:10px;
+    margin-bottom:12px;
+}
+
+.user-msg {
+    background:#21262D;
+    color:white;
+    text-align:right;
+}
+
+.ai-msg {
+    background:#161B22;
+    color:white;
+}
+
+.header {
+    text-align:center;
+    font-size:26px;
+    font-weight:700;
+}
+
+.footer {
+    text-align:center;
+    font-size:11px;
+    color:#8B949E;
+    margin-top:20px;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -26,26 +52,45 @@ genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
-# --- SEARCH ---
+# --- FIXED SEARCH ---
 def real_search(query):
     try:
+        if "news" in query.lower():
+            search_query = f"{query} india world breaking news 2026"
+        else:
+            search_query = query
+
         with DDGS() as ddgs:
-            results = ddgs.text(query, max_results=5)
-        return "\n".join([r["body"] for r in results])
+            results = ddgs.text(search_query, max_results=8)
+
+        clean = []
+        for r in results:
+            text = r.get("body", "")
+
+            if any(w in text.lower() for w in ["grammar", "pronoun", "dictionary"]):
+                continue
+
+            if len(text) > 50:
+                clean.append(text)
+
+        return "\n".join(clean[:5])
+
     except:
         return ""
 
-# --- IMAGE (REAL USING POLLINATIONS API - FREE) ---
+# --- IMAGE ---
 def generate_image(prompt):
-    url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
-    return url
+    return f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
 
 # --- TURBO ---
 def karzon_turbo(query):
     context = real_search(query)
 
     prompt = f"""
-    Answer in Hinglish smartly.
+    You are a smart AI.
+    Give clean, useful answer in Hinglish.
+
+    If question is news → only latest news.
 
     Data:
     {context}
@@ -124,7 +169,7 @@ else:
 
     st.markdown('<div class="header">Karzon AI</div>', unsafe_allow_html=True)
 
-    # --- CHAT MODE ---
+    # CHAT
     if st.session_state.mode == "chat":
         st.markdown('<div class="chat-container">', unsafe_allow_html=True)
 
@@ -150,17 +195,16 @@ else:
             st.session_state.messages.append({"role": "assistant", "content": full})
             st.rerun()
 
-    # --- SEARCH MODE ---
+    # SEARCH
     elif st.session_state.mode == "search":
         q = st.text_input("Search anything")
         if q:
             st.write(real_search(q))
 
-    # --- IMAGE MODE ---
+    # IMAGE
     elif st.session_state.mode == "image":
         p = st.text_input("Describe image")
         if st.button("Generate Image"):
-            img_url = generate_image(p)
-            st.image(img_url, use_column_width=True)
+            st.image(generate_image(p), use_column_width=True)
 
     st.markdown('<div class="footer">© 2026 KARZON AI - VED PRAKASH</div>', unsafe_allow_html=True)
