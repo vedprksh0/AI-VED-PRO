@@ -8,42 +8,16 @@ import time
 # --- CONFIG ---
 st.set_page_config(page_title="Karzon AI", layout="wide")
 
-# --- STYLE (WHITE CLEAN UI) ---
+# --- STYLE ---
 st.markdown("""
 <style>
 .stApp { background:#0E1117; color:#E6EDF3; }
-
 .chat-container { width:70%; margin:auto; }
-
-.chat-msg {
-    padding:14px;
-    border-radius:10px;
-    margin-bottom:12px;
-}
-
-.user-msg {
-    background:#21262D;
-    color:white;
-    text-align:right;
-}
-
-.ai-msg {
-    background:#161B22;
-    color:white;
-}
-
-.header {
-    text-align:center;
-    font-size:26px;
-    font-weight:700;
-}
-
-.footer {
-    text-align:center;
-    font-size:11px;
-    color:#8B949E;
-    margin-top:20px;
-}
+.chat-msg { padding:14px; border-radius:10px; margin-bottom:12px; }
+.user-msg { background:#21262D; text-align:right; }
+.ai-msg { background:#161B22; }
+.header { text-align:center; font-size:26px; font-weight:700; }
+.footer { text-align:center; font-size:11px; color:#8B949E; margin-top:20px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -52,26 +26,42 @@ genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
-# --- FIXED SEARCH ---
+# --- SMART NEWS SEARCH ---
 def real_search(query):
     try:
-        if "news" in query.lower():
-            search_query = f"{query} india world breaking news 2026"
+        q = query.lower()
+
+        # 🔧 FIX TYPO
+        if "nrews" in q:
+            q = q.replace("nrews", "news")
+
+        # 🔥 FORCE LATEST NEWS
+        if "news" in q or "today" in q:
+            search_query = f"{q} india world breaking news latest 2026"
         else:
-            search_query = query
+            search_query = q
 
         with DDGS() as ddgs:
-            results = ddgs.text(search_query, max_results=8)
+            results = ddgs.text(search_query, max_results=10)
 
         clean = []
         for r in results:
-            text = r.get("body", "")
+            text = r.get("body", "").lower()
 
-            if any(w in text.lower() for w in ["grammar", "pronoun", "dictionary"]):
+            # ❌ remove garbage
+            if any(w in text for w in [
+                "grammar", "pronoun", "dictionary",
+                "definition", "meaning", "example sentence"
+            ]):
                 continue
 
-            if len(text) > 50:
-                clean.append(text)
+            # ✅ keep real content
+            if len(text) > 80:
+                clean.append(r["body"])
+
+        # अगर कुछ ना मिला → fallback
+        if not clean:
+            return "No fresh news found. Try more specific topic."
 
         return "\n".join(clean[:5])
 
@@ -82,15 +72,18 @@ def real_search(query):
 def generate_image(prompt):
     return f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
 
-# --- TURBO ---
+# --- TURBO AI ---
 def karzon_turbo(query):
     context = real_search(query)
 
     prompt = f"""
-    You are a smart AI.
-    Give clean, useful answer in Hinglish.
+    You are a professional news AI.
 
-    If question is news → only latest news.
+    RULES:
+    - Only latest real news
+    - No grammar explanation
+    - No dictionary meaning
+    - Give short bullet points
 
     Data:
     {context}
