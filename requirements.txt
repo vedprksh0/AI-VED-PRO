@@ -1,6 +1,7 @@
 streamlit
 groq
-duckduckgo_search
 supabase
 google-generativeai
-SpeechRecognition
+duckduckgo_search
+requests
+beautifulsoup4
