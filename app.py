@@ -13,9 +13,23 @@ st.markdown("""
 <style>
 .stApp { background:#0E1117; color:#E6EDF3; }
 .chat-container { width:70%; margin:auto; }
-.chat-msg { padding:14px; border-radius:10px; margin-bottom:12px; }
+
+.chat-msg {
+    padding:14px;
+    border-radius:10px;
+    margin-bottom:12px;
+}
 .user-msg { background:#21262D; text-align:right; }
 .ai-msg { background:#161B22; }
+
+.card {
+    background:#161B22;
+    padding:15px;
+    border-radius:10px;
+    margin-bottom:10px;
+    border:1px solid #30363D;
+}
+
 .header { text-align:center; font-size:26px; font-weight:700; }
 .footer { text-align:center; font-size:11px; color:#8B949E; margin-top:20px; }
 </style>
@@ -26,47 +40,43 @@ genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
-# --- SMART NEWS SEARCH ---
+# --- SMART SEARCH (NEWS FIXED) ---
 def real_search(query):
     try:
         q = query.lower()
 
-        # 🔧 FIX TYPO
+        # typo fix
         if "nrews" in q:
             q = q.replace("nrews", "news")
 
-        # 🔥 FORCE LATEST NEWS
-        if "news" in q or "today" in q:
-            search_query = f"{q} india world breaking news latest 2026"
+        # force news intent
+        if any(k in q for k in ["news", "war", "iran", "israel", "breaking"]):
+            search_query = f"{q} latest breaking news 2026"
         else:
             search_query = q
 
         with DDGS() as ddgs:
-            results = ddgs.text(search_query, max_results=10)
+            results = ddgs.text(search_query, max_results=8)
 
-        clean = []
-        for r in results:
-            text = r.get("body", "").lower()
-
-            # ❌ remove garbage
-            if any(w in text for w in [
-                "grammar", "pronoun", "dictionary",
-                "definition", "meaning", "example sentence"
-            ]):
-                continue
-
-            # ✅ keep real content
-            if len(text) > 80:
-                clean.append(r["body"])
-
-        # अगर कुछ ना मिला → fallback
-        if not clean:
-            return "No fresh news found. Try more specific topic."
-
-        return "\n".join(clean[:5])
+        return results
 
     except:
-        return ""
+        return []
+
+# --- NEWS CARDS UI ---
+def show_news_cards(results):
+    for r in results:
+        title = r.get("title", "No title")
+        body = r.get("body", "")
+        link = r.get("href", "#")
+
+        st.markdown(f"""
+        <div class="card">
+            <b>{title}</b><br>
+            <small>{body}</small><br><br>
+            <a href="{link}" target="_blank">Read more</a>
+        </div>
+        """, unsafe_allow_html=True)
 
 # --- IMAGE ---
 def generate_image(prompt):
@@ -74,15 +84,14 @@ def generate_image(prompt):
 
 # --- TURBO AI ---
 def karzon_turbo(query):
-    context = real_search(query)
+    results = real_search(query)
+    context = "\n".join([r.get("body", "") for r in results])
 
     prompt = f"""
-    You are a professional news AI.
+    You are a LIVE NEWS AI.
 
-    RULES:
-    - Only latest real news
-    - No grammar explanation
-    - No dictionary meaning
+    - Give only latest real information
+    - Ignore grammar or dictionary text
     - Give short bullet points
 
     Data:
@@ -138,8 +147,8 @@ else:
         if st.button("💬 Chat"):
             st.session_state.mode = "chat"
 
-        if st.button("🔍 Search"):
-            st.session_state.mode = "search"
+        if st.button("📰 News"):
+            st.session_state.mode = "news"
 
         if st.button("🎨 Image"):
             st.session_state.mode = "image"
@@ -162,7 +171,7 @@ else:
 
     st.markdown('<div class="header">Karzon AI</div>', unsafe_allow_html=True)
 
-    # CHAT
+    # --- CHAT ---
     if st.session_state.mode == "chat":
         st.markdown('<div class="chat-container">', unsafe_allow_html=True)
 
@@ -188,13 +197,20 @@ else:
             st.session_state.messages.append({"role": "assistant", "content": full})
             st.rerun()
 
-    # SEARCH
-    elif st.session_state.mode == "search":
-        q = st.text_input("Search anything")
-        if q:
-            st.write(real_search(q))
+    # --- NEWS MODE (CARDS + AUTO REFRESH) ---
+    elif st.session_state.mode == "news":
+        query = st.text_input("Search news", "latest news")
 
-    # IMAGE
+        results = real_search(query)
+
+        if results:
+            show_news_cards(results)
+
+        # 🔄 auto refresh every 30 sec
+        time.sleep(30)
+        st.rerun()
+
+    # --- IMAGE ---
     elif st.session_state.mode == "image":
         p = st.text_input("Describe image")
         if st.button("Generate Image"):
