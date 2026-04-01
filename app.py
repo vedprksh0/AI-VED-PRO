@@ -40,12 +40,15 @@ try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
     groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
     supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-    TAVILY_API_KEY = st.secrets["TAVILY_API_KEY"]
+    # Tavily optional setting to prevent crash
+    TAVILY_API_KEY = st.secrets.get("TAVILY_API_KEY", None)
 except Exception as e:
-    st.error("Secrets missing! Please add GOOGLE_API_KEY, GROQ_API_KEY, TAVILY_API_KEY, etc.")
+    st.error("Secrets missing! Check GOOGLE_API_KEY, GROQ_API_KEY, etc.")
 
-# --- TAVILY SEARCH (REPLACED DDGS FOR STABILITY) ---
+# --- TAVILY SEARCH (FAST & STABLE) ---
 def real_search(query):
+    if not TAVILY_API_KEY:
+        return "Search disabled (No API Key)."
     try:
         url = "https://api.tavily.com/search"
         payload = {
@@ -56,8 +59,6 @@ def real_search(query):
         }
         response = requests.post(url, json=payload, timeout=5)
         results = response.json().get("results", [])
-        if not results:
-            return "No internet data."
         return "\n".join([r.get("content", "") for r in results])
     except:
         return "Search skip ho gaya."
@@ -66,19 +67,19 @@ def real_search(query):
 def generate_image(prompt):
     return f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
 
-# --- AI ENGINE (FIXED FALLBACK) ---
+# --- AI ENGINE (THE REAL FIX) ---
 def karzon_turbo(query):
+    # Context fetch (Safe mode)
     context = real_search(query)
 
     prompt = f"""
-    You are Karzon AI.
-    RULES:
-    - Always reply in Hinglish + English.
-    - Use this Context if helpful: {context}
-    Question: {query}
+    You are Karzon AI. 
+    Rules: Reply in Hinglish. 
+    Context: {context}
+    User Question: {query}
     """
 
-    # 1. First Attempt: Groq
+    # 1. Try Groq
     try:
         res = groq_client.chat.completions.create(
             model="llama3-70b-8192",
@@ -86,14 +87,15 @@ def karzon_turbo(query):
             timeout=10.0
         )
         return res.choices[0].message.content
-    except:
-        # 2. Second Attempt: Gemini (Fallback)
+    except Exception as e1:
+        # 2. Try Gemini as Fallback
         try:
             model = genai.GenerativeModel('gemini-1.5-flash')
             response = model.generate_content(prompt)
             return response.text
-        except:
-            return "Dono servers busy hain. Please check API Limits!"
+        except Exception as e2:
+            # Show actual error if both fail (Debugging)
+            return f"Technical Error! Groq: {str(e1)[:30]} | Gemini: {str(e2)[:30]}"
 
 # --- SESSION ---
 if "login" not in st.session_state: st.session_state.login = False
@@ -113,13 +115,14 @@ if not st.session_state.login:
             st.rerun()
         except: st.error("Login failed")
 
-# --- MAIN ---
+# --- MAIN INTERFACE ---
 else:
     with st.sidebar:
         st.markdown("## Karzon AI")
         if st.button("💬 Chat"): st.session_state.mode = "chat"
         if st.button("📰 News"): st.session_state.mode = "news"
         if st.button("🎨 Image"): st.session_state.mode = "image"
+        
         if st.button("➕ New Chat"):
             if st.session_state.messages:
                 st.session_state.history.append(st.session_state.messages)
@@ -141,22 +144,28 @@ else:
 
     # --- CHAT MODE ---
     if st.session_state.mode == "chat":
+        # Container to show old messages
         st.markdown('<div class="chat-container">', unsafe_allow_html=True)
         for msg in st.session_state.messages:
             cls = "user-msg" if msg["role"] == "user" else "ai-msg"
             st.markdown(f'<div class="chat-msg {cls}">{msg["content"]}</div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
+        # Input Area
         if prompt := st.chat_input("Ask anything..."):
             st.session_state.messages.append({"role": "user", "content": prompt})
             
-            # Streaming UI inside Original Style
+            # Temporary UI update to show user message immediately
+            st.markdown(f'<div class="chat-container"><div class="chat-msg user-msg">{prompt}</div></div>', unsafe_allow_html=True)
+            
+            # AI Response
             reply = karzon_turbo(prompt)
+            
+            # Typing Animation inside original style
             placeholder = st.empty()
             full = ""
             for word in reply.split():
                 full += word + " "
-                # Keeping the style exactly as requested
                 placeholder.markdown(f'<div class="chat-container"><div class="chat-msg ai-msg">{full}▌</div></div>', unsafe_allow_html=True)
                 time.sleep(0.01)
             placeholder.markdown(f'<div class="chat-container"><div class="chat-msg ai-msg">{full}</div></div>', unsafe_allow_html=True)
@@ -169,13 +178,14 @@ else:
         query = st.text_input("Search news")
         if query:
             with st.spinner("Fetching..."):
-                result = karzon_turbo(f"Latest news summary about: {query}")
+                result = karzon_turbo(f"Latest news about: {query}")
                 st.markdown(f'<div class="card">{result}</div>', unsafe_allow_html=True)
 
     # --- IMAGE MODE ---
     elif st.session_state.mode == "image":
         p = st.text_input("Describe image")
         if st.button("Generate Image"):
-            st.image(generate_image(p), use_column_width=True)
+            with st.spinner("Creating..."):
+                st.image(generate_image(p), use_column_width=True)
 
     st.markdown('<div class="footer">© 2026 KARZON AI - VED PRAKASH</div>', unsafe_allow_html=True)
