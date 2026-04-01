@@ -5,3 +5,4 @@ supabase
 duckduckgo-search
 pandas
 python-dotenv
+tavily
