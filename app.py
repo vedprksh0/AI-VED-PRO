@@ -3,6 +3,7 @@ from groq import Groq
 from duckduckgo_search import DDGS
 from supabase import create_client, Client
 import google.generativeai as genai
+import time
 
 # --- CONFIG ---
 st.set_page_config(page_title="Karzon AI", layout="wide")
@@ -10,67 +11,43 @@ st.set_page_config(page_title="Karzon AI", layout="wide")
 # --- STYLE ---
 st.markdown("""
 <style>
-.stApp { background:#0E1117; color:white; }
-
-.chat-msg {
-    padding:12px 16px;
-    border-radius:12px;
-    margin-bottom:10px;
-    max-width:80%;
-}
-.user-msg { background:#1f6feb; margin-left:auto; }
-.ai-msg { background:#161b22; }
-
-.header { font-size:20px; font-weight:700; padding:10px; }
-.footer { position:fixed; bottom:10px; left:10px; font-size:11px; color:#666; }
+.stApp { background:#0E1117; color:#E6EDF3; }
+.chat-container { width:70%; margin:auto; }
+.chat-msg { padding:14px; border-radius:12px; margin-bottom:12px; }
+.user-msg { background:#238636; text-align:right; }
+.ai-msg { background:#161B22; }
+.header { text-align:center; font-size:26px; font-weight:700; }
+.footer { text-align:center; font-size:11px; color:#8B949E; margin-top:20px; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- API KEYS ---
+# --- API ---
 genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 
-# --- REAL SEARCH ---
+# --- SEARCH ---
 def real_search(query):
     try:
         with DDGS() as ddgs:
             results = ddgs.text(query, max_results=5)
-
-        clean = []
-        for r in results:
-            clean.append(f"{r['title']}: {r['body']}")
-
-        return "\n\n".join(clean)
+        return "\n".join([r["body"] for r in results])
     except:
         return ""
 
-# --- IMAGE GENERATOR ---
+# --- IMAGE (REAL USING POLLINATIONS API - FREE) ---
 def generate_image(prompt):
-    try:
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(f"Create a detailed AI image prompt: {prompt}")
-        return response.text
-    except:
-        return "Image generation failed."
+    url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
+    return url
 
-# --- VOICE (SAFE VERSION - NO CRASH) ---
-def voice_to_text():
-    try:
-        import speech_recognition as sr
-        r = sr.Recognizer()
-        with sr.Microphone() as source:
-            audio = r.listen(source, timeout=5)
-            return r.recognize_google(audio)
-    except:
-        return ""
-
-# --- TURBO ENGINE ---
+# --- TURBO ---
 def karzon_turbo(query):
     context = real_search(query)
 
     prompt = f"""
-    Latest data:
+    Answer in Hinglish smartly.
+
+    Data:
     {context}
 
     Question:
@@ -84,20 +61,21 @@ def karzon_turbo(query):
         )
         return res.choices[0].message.content
     except:
-        pass
-
-    try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        res = model.generate_content(prompt)
-        return res.text
-    except:
-        return context
+        try:
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            return model.generate_content(prompt).text
+        except:
+            return context
 
 # --- SESSION ---
 if "login" not in st.session_state:
     st.session_state.login = False
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "mode" not in st.session_state:
+    st.session_state.mode = "chat"
+if "history" not in st.session_state:
+    st.session_state.history = []
 
 # --- LOGIN ---
 if not st.session_state.login:
@@ -108,72 +86,81 @@ if not st.session_state.login:
 
     if st.button("Login"):
         try:
-            supabase.auth.sign_in_with_password({
-                "email": email,
-                "password": password
-            })
+            supabase.auth.sign_in_with_password({"email": email, "password": password})
             st.session_state.login = True
             st.rerun()
         except:
             st.error("Login failed")
 
-# --- MAIN APP ---
+# --- MAIN ---
 else:
     with st.sidebar:
         st.markdown("## Karzon AI")
 
+        if st.button("💬 Chat"):
+            st.session_state.mode = "chat"
+
+        if st.button("🔍 Search"):
+            st.session_state.mode = "search"
+
+        if st.button("🎨 Image"):
+            st.session_state.mode = "image"
+
         if st.button("➕ New Chat"):
+            if st.session_state.messages:
+                st.session_state.history.append(st.session_state.messages)
             st.session_state.messages = []
 
-        # SEARCH
-        st.markdown("### 🔍 Search")
-        search_q = st.text_input("Search anything")
-        if search_q:
-            st.write(real_search(search_q))
-
-        # IMAGE
-        st.markdown("### 🎨 Image Creation")
-        img_prompt = st.text_input("Describe image")
-        if st.button("Generate Image"):
-            st.write(generate_image(img_prompt))
-
-        # VOICE
-        st.markdown("### Voice Input")
-        if st.button("Start Voice Input"):
-            text = voice_to_text()
-            if text:
-                st.session_state.messages.append({"role": "user", "content": text})
-                st.rerun()
-
-        # HISTORY
         st.markdown("### Your Chats")
-        for m in st.session_state.messages[-5:]:
-            if m["role"] == "user":
-                st.write("💬 " + m["content"][:20])
+        for i, chat in enumerate(reversed(st.session_state.history)):
+            if st.button(f"Chat {i+1}"):
+                st.session_state.messages = chat
+                st.session_state.mode = "chat"
+                st.rerun()
 
         if st.button("Logout"):
             st.session_state.login = False
             st.rerun()
 
-    # HEADER
     st.markdown('<div class="header">Karzon AI</div>', unsafe_allow_html=True)
 
-    # CHAT
-    for msg in st.session_state.messages:
-        if msg["role"] == "user":
-            st.markdown(f'<div class="chat-msg user-msg">{msg["content"]}</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="chat-msg ai-msg">{msg["content"]}</div>', unsafe_allow_html=True)
+    # --- CHAT MODE ---
+    if st.session_state.mode == "chat":
+        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
 
-    # INPUT
-    if prompt := st.chat_input("Ask anything..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
+        for msg in st.session_state.messages:
+            cls = "user-msg" if msg["role"] == "user" else "ai-msg"
+            st.markdown(f'<div class="chat-msg {cls}">{msg["content"]}</div>', unsafe_allow_html=True)
 
-        with st.spinner("Thinking..."):
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        if prompt := st.chat_input("Ask anything..."):
+            st.session_state.messages.append({"role": "user", "content": prompt})
+
             reply = karzon_turbo(prompt)
 
-        st.session_state.messages.append({"role": "assistant", "content": reply})
-        st.rerun()
+            placeholder = st.empty()
+            full = ""
 
-# FOOTER
-st.markdown('<div class="footer">© 2026 KARZON AI - VED PRAKASH</div>', unsafe_allow_html=True)
+            for word in reply.split():
+                full += word + " "
+                placeholder.markdown(full)
+                time.sleep(0.02)
+
+            st.session_state.messages.append({"role": "assistant", "content": full})
+            st.rerun()
+
+    # --- SEARCH MODE ---
+    elif st.session_state.mode == "search":
+        q = st.text_input("Search anything")
+        if q:
+            st.write(real_search(q))
+
+    # --- IMAGE MODE ---
+    elif st.session_state.mode == "image":
+        p = st.text_input("Describe image")
+        if st.button("Generate Image"):
+            img_url = generate_image(p)
+            st.image(img_url, use_column_width=True)
+
+    st.markdown('<div class="footer">© 2026 KARZON AI - VED PRAKASH</div>', unsafe_allow_html=True)
