@@ -1,6 +1,6 @@
 streamlit
 groq
-duckduckgo_search==5.3.0
 supabase
 google-generativeai
+requests
 Pillow
