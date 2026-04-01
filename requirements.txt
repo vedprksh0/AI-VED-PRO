@@ -1,9 +1,6 @@
-streamlit
-groq
-duckduckgo_search
-supabase
-google-generativeai
-SpeechRecognition
-diffusers
-torch
+streamlit==1.31.0
+groq==0.4.2
+duckduckgo_search==5.0
+supabase==2.3.7
+google-generativeai==0.4.0
 Pillow
