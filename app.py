@@ -4,181 +4,139 @@ from groq import Groq
 from duckduckgo_search import DDGS
 from supabase import create_client, Client
 import google.generativeai as genai
-from datetime import datetime
 
-# --- 1. CONFIG ---
-st.set_page_config(page_title="Karzon AI", page_icon="⚡", layout="wide")
+# --- 1. CONFIG & GOOGLE VERIFICATION ---
+st.set_page_config(page_title="Karzon AI", page_icon="🌐", layout="wide")
 
-# --- 2. ULTRA-PREMIUM DARK CSS (No More Chamak) ---
+# Google Search Console Verification Tag
+st.markdown('<head><meta name="google-site-verification" content="Jt9DVZe2CIYVCVioXQBo-pO_mWQF-v0Lirpha0NE74A" /></head>', unsafe_allow_html=True)
+
+# --- 2. PROFESSIONAL DARK UI (STABLE & CLEAN) ---
 st.markdown("""
     <style>
-        /* Global Background - Deep Dark */
-        .stApp {
-            background: #050505;
-            color: #E0E0E0;
-            font-family: 'Inter', sans-serif;
-        }
+        .stApp { background-color: #0E1117; color: #FAFAFA; }
+        [data-testid="stSidebar"] { background-color: #161B22 !important; border-right: 1px solid #30363D; }
+        [data-testid="stSidebarNav"] { display: none; }
         
-        /* Hide Streamlit Branded Elements */
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
+        /* Header Box */
+        .header-box { display: flex; justify-content: space-between; align-items: center; padding: 10px 5%; border-bottom: 1px solid #30363D; background: #0E1117; position: sticky; top: 0; z-index: 99; }
+        .upgrade-btn { border: 2px solid #FAFAFA; border-radius: 20px; padding: 5px 15px; font-weight: 800; font-size: 13px; color: #FAFAFA; cursor: pointer; text-decoration: none; }
+
+        /* Welcome Text */
+        .welcome-area { text-align: center; margin-top: 10vh; margin-bottom: 30px; }
+        .welcome-title { font-size: 36px; font-weight: 800; color: #FAFAFA; }
+
+        /* Round Input Box */
+        .stChatInputContainer { border: 2px solid #30363D !important; border-radius: 40px !important; width: 80% !important; margin: 0 auto !important; background: #161B22 !important; }
         
-        /* Sidebar - Glass Effect */
-        [data-testid="stSidebar"] {
-            background-color: #0A0A0A !important;
-            border-right: 1px solid #1E1E1E;
-        }
-        
-        /* Professional Chat Bubbles (Gemini Style) */
-        .stChatMessage {
-            background-color: transparent !important;
-            border: none !important;
-            margin-bottom: 20px !important;
-        }
-        
-        /* User Message Container */
-        div[data-testid="stChatMessage"]:nth-child(even) {
-            background-color: #1A1A1A !important;
-            border-radius: 15px !important;
-            padding: 15px !important;
-        }
-
-        /* Assistant Message Container */
-        div[data-testid="stChatMessage"]:nth-child(odd) {
-            background-color: transparent !important;
-            padding: 15px !important;
-        }
-
-        /* Search Bar - Floating & Rounded */
-        .stChatInputContainer {
-            border: 1px solid #333 !important;
-            border-radius: 50px !important;
-            background: #111 !important;
-            width: 70% !important;
-            bottom: 30px !important;
-        }
-
-        /* Buttons & Sidebar Items */
-        .stButton>button {
-            border-radius: 20px;
-            background: #1E1E1E;
-            color: white;
-            border: 1px solid #333;
-            transition: 0.3s;
-        }
-        .stButton>button:hover {
-            background: white;
-            color: black;
-        }
-
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 5px; }
-        ::-webkit-scrollbar-track { background: #050505; }
-        ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
-
-        /* Branding Footer */
-        .brand-footer {
-            position: fixed;
-            bottom: 10px;
-            left: 20px;
-            font-size: 10px;
-            color: #555;
-            font-weight: bold;
-        }
+        /* Sidebar Elements */
+        .side-item { font-size: 16px; font-weight: 600; padding: 12px 0; color: #C9D1D9; border-bottom: 1px solid #30363D; cursor: pointer; }
+        .history-label { font-size: 12px; color: #8B949E; margin-top: 30px; font-weight: 700; text-transform: uppercase; }
+        .history-item { font-size: 13px; color: #8B949E; padding: 8px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .footer-ved { position: fixed; bottom: 20px; left: 15px; font-size: 11px; font-weight: 900; color: #8B949E; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. LOGIC & ENGINES ---
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
-supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+# --- 3. CONNECTIONS ---
+try:
+    genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+    groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+    supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+except Exception as e:
+    st.error("Bhai, Secrets check karo! API key ya Supabase details missing hain.")
 
-def get_2026_news(query):
+# --- 4. ENGINE: KARZON TURBO (LIFETIME SEARCH) ---
+def karzon_turbo_engine(query):
     try:
-        # Force 2026 Logic
+        # Search for 2026 data
         with DDGS() as ddgs:
-            # Adding "2026 current" to ensure latest data
-            search_query = f"{query} news April 2026 updates"
-            results = [r['body'] for r in ddgs.text(search_query, max_results=3)]
-        return "\n".join(results)
-    except:
-        return "Real-time search unavailable. Using neural knowledge."
+            results = [r['body'] for r in ddgs.text(f"{query} latest news April 2026", max_results=3)]
+        context = "\n".join(results)
+        
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        sys_instr = "You are Karzon AI, created by Ved Prakash. Today is April 1, 2026. Answer in Hinglish/English naturally. Use LaTeX for math."
+        response = model.generate_content(f"{sys_instr}\n\nWeb Data: {context}\n\nUser: {query}")
+        return response.text
+    except Exception as e:
+        # Fallback to internal knowledge if search fails
+        res = groq_client.chat.completions.create(model="llama-3.1-8b-instant", messages=[{"role":"user","content":query}])
+        return "Bhai, web connection thoda slow hai par main jawab de raha hoon:\n\n" + res.choices[0].message.content
 
-# --- 4. AUTH & SESSION ---
+# --- 5. SESSION STATES ---
 if "logged_in" not in st.session_state: st.session_state.logged_in = False
 if "messages" not in st.session_state: st.session_state.messages = []
 if "chat_history" not in st.session_state: st.session_state.chat_history = []
+if "welcome_msg" not in st.session_state:
+    st.session_state.welcome_msg = random.choice(["What's the mission today, Ved?", "How can I help you?", "Karzon AI is ready."])
 
-# --- 5. INTERFACE ---
+# --- 6. AUTH SYSTEM (SIGN IN & SIGN UP) ---
 if not st.session_state.logged_in:
-    st.markdown("<h1 style='text-align: center; margin-top: 100px; letter-spacing: -2px;'>Karzon AI</h1>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([1, 1.5, 1])
+    st.markdown("<h1 style='text-align: center; margin-top: 50px;'>Karzon AI</h1>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        t1, t2 = st.tabs(["Log In", "Create Account"])
-        with t1:
-            e = st.text_input("Email")
-            p = st.text_input("Password", type="password")
-            if st.button("Access Karzon AI", use_container_width=True):
+        tab1, tab2 = st.tabs(["Sign In", "Create Account"])
+        with tab1:
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            if st.button("Login", use_container_width=True):
                 try:
-                    supabase.auth.sign_in_with_password({"email": e, "password": p})
+                    supabase.auth.sign_in_with_password({"email": email, "password": password})
                     st.session_state.logged_in = True
                     st.rerun()
-                except: st.error("Invalid credentials.")
-        with t2:
-            ne = st.text_input("New Email")
-            np = st.text_input("New Password", type="password")
-            if st.button("Register Account", use_container_width=True):
-                supabase.auth.sign_up({"email": ne, "password": np})
-                st.success("Account created! Log in now.")
+                except: st.error("Email or Password galat hai!")
+        with tab2:
+            n_email = st.text_input("New Email")
+            n_pass = st.text_input("New Password", type="password")
+            if st.button("Join Karzon AI", use_container_width=True):
+                try:
+                    supabase.auth.sign_up({"email": n_email, "password": n_pass})
+                    st.success("Account ban gaya! Sign In tab par jao.")
+                except: st.error("Registration failed.")
 
+# --- 7. MAIN DASHBOARD ---
 else:
-    # Sidebar
     with st.sidebar:
-        st.markdown("<h2 style='letter-spacing:-1px;'>Karzon AI</h2>", unsafe_allow_html=True)
-        if st.button("+ New Chat", use_container_width=True):
+        st.markdown('<div style="font-size:24px; font-weight:900; color:white;">Karzon AI</div>', unsafe_allow_html=True)
+        st.markdown('<div class="side-item">🔍 Search chat</div>', unsafe_allow_html=True)
+        if st.button("📝 New chat", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
+        st.markdown('<div class="side-item">🎨 Image creation</div>', unsafe_allow_html=True)
         
-        st.write("")
-        st.markdown("<p style='font-size:10px; color:#555;'>RECENT SESSIONS</p>", unsafe_allow_html=True)
-        for h in reversed(st.session_state.chat_history[-5:]):
-            st.markdown(f"<div style='font-size:13px; margin-bottom:10px; color:#AAA;'>● {h}</div>", unsafe_allow_html=True)
-            
+        st.markdown('<div class="history-label">Your chats</div>', unsafe_allow_html=True)
+        for h in reversed(st.session_state.chat_history[-6:]):
+            st.markdown(f'<div class="history-item">💬 {h}</div>', unsafe_allow_html=True)
+        
         st.write("---")
         if st.button("Sign Out", use_container_width=True):
             st.session_state.logged_in = False
             st.rerun()
-        st.markdown("<div class='brand-footer'>© 2026 | BUILT BY VED PRAKASH</div>", unsafe_allow_html=True)
+        st.markdown('<div class="footer-ved">© 2026, BUILT BY<br>VED PRAKASH</div>', unsafe_allow_html=True)
 
-    # Main Chat View
+    # Header
+    st.markdown('<div class="header-box"><div>Karzon AI</div><div class="upgrade-btn">Upgrade</div></div>', unsafe_allow_html=True)
+
+    # Welcome Area
     if not st.session_state.messages:
-        st.markdown("<h1 style='text-align:center; margin-top:25vh; color:#333;'>How can I help you, Ved?</h1>", unsafe_allow_html=True)
-    
-    # Custom Avatar Avatars (Clean & Pro)
-    for m in st.session_state.messages:
-        avatar = "👤" if m["role"] == "user" else "⚡"
-        with st.chat_message(m["role"], avatar=avatar):
-            st.markdown(m["content"])
+        st.markdown(f'<div class="welcome-area"><div class="welcome-title">{st.session_state.welcome_msg}</div></div>', unsafe_allow_html=True)
+    else:
+        for m in st.session_state.messages:
+            with st.chat_message(m["role"]): st.markdown(m["content"])
 
-    # Chat Input
-    if prompt := st.chat_input("Ask Karzon AI..."):
+    # Bottom Input
+    if p := st.chat_input("Ask Karzon AI anything..."):
+        # Save only the first message of a session to history
         if not st.session_state.messages:
-            st.session_state.chat_history.append(prompt[:25])
+            st.session_state.chat_history.append(p[:30])
         
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user", avatar="👤"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant", avatar="⚡"):
-            with st.spinner("Analyzing..."):
-                # 2026 Engine
-                context = get_2026_news(prompt)
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                sys_msg = "You are Karzon AI, created by Ved Prakash. Today is April 1, 2026. Be professional, direct, and use Hinglish naturally. Solve math in LaTeX."
-                response = model.generate_content(f"{sys_msg}\n\nSearch Context:\n{context}\n\nQuestion: {prompt}")
-                
-                output = response.text
-                st.markdown(output)
-                st.session_state.messages.append({"role": "assistant", "content": output})
+        st.session_state.messages.append({"role": "user", "content": p})
+        with st.chat_message("user"): st.markdown(p)
+        
+        with st.chat_message("assistant"):
+            with st.spinner("Karzon Turbo is thinking..."):
+                ans = karzon_turbo_engine(p)
+                st.markdown(ans)
+                st.session_state.messages.append({"role": "assistant", "content": ans})
         st.rerun()
+
+st.markdown('<div style="text-align:center; font-size:11px; color:#8B949E; margin-top:20px; padding-bottom:20px;">Karzon AI can make mistakes. Check important info.</div>', unsafe_allow_html=True)
