@@ -1,8 +1,8 @@
 streamlit
 groq
-google-generativeai
+duckduckgo_search
 supabase
-duckduckgo-search
-pandas
-python-dotenv
-tavily
+google-generativeai
+streamlit-webrtc
+SpeechRecognition
+pyaudio
