@@ -40,7 +40,6 @@ try:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
     groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
     supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-    # Tavily optional setting to prevent crash
     TAVILY_API_KEY = st.secrets.get("TAVILY_API_KEY", None)
 except Exception as e:
     st.error("Secrets missing! Check GOOGLE_API_KEY, GROQ_API_KEY, etc.")
@@ -67,34 +66,30 @@ def real_search(query):
 def generate_image(prompt):
     return f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}"
 
-# --- AI ENGINE (THE REAL FIX) ---
+# --- AI ENGINE (FIXED MODELS 2026) ---
 def karzon_turbo(query):
-    # Context fetch (Safe mode)
-    context = real_search(query)
+    try:
+        context = real_search(query)
+    except:
+        context = "No context available."
 
-    prompt = f"""
-    You are Karzon AI. 
-    Rules: Reply in Hinglish. 
-    Context: {context}
-    User Question: {query}
-    """
+    prompt = f"User Question: {query}\nContext: {context}\nInstructions: You are Karzon AI. Answer in Hinglish."
 
-    # 1. Try Groq
+    # 1. Try Groq (Latest Model 2026)
     try:
         res = groq_client.chat.completions.create(
-            model="llama3-70b-8192",
+            model="llama-3.3-70b-versatile", 
             messages=[{"role": "user", "content": prompt}],
             timeout=10.0
         )
         return res.choices[0].message.content
     except Exception as e1:
-        # 2. Try Gemini as Fallback
+        # 2. Try Gemini (Latest Model 2026)
         try:
-            model = genai.GenerativeModel('gemini-1.5-flash')
+            model = genai.GenerativeModel('gemini-1.5-flash-latest')
             response = model.generate_content(prompt)
             return response.text
         except Exception as e2:
-            # Show actual error if both fail (Debugging)
             return f"Technical Error! Groq: {str(e1)[:30]} | Gemini: {str(e2)[:30]}"
 
 # --- SESSION ---
@@ -115,7 +110,7 @@ if not st.session_state.login:
             st.rerun()
         except: st.error("Login failed")
 
-# --- MAIN INTERFACE ---
+# --- MAIN ---
 else:
     with st.sidebar:
         st.markdown("## Karzon AI")
@@ -144,48 +139,3 @@ else:
 
     # --- CHAT MODE ---
     if st.session_state.mode == "chat":
-        # Container to show old messages
-        st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-        for msg in st.session_state.messages:
-            cls = "user-msg" if msg["role"] == "user" else "ai-msg"
-            st.markdown(f'<div class="chat-msg {cls}">{msg["content"]}</div>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        # Input Area
-        if prompt := st.chat_input("Ask anything..."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            
-            # Temporary UI update to show user message immediately
-            st.markdown(f'<div class="chat-container"><div class="chat-msg user-msg">{prompt}</div></div>', unsafe_allow_html=True)
-            
-            # AI Response
-            reply = karzon_turbo(prompt)
-            
-            # Typing Animation inside original style
-            placeholder = st.empty()
-            full = ""
-            for word in reply.split():
-                full += word + " "
-                placeholder.markdown(f'<div class="chat-container"><div class="chat-msg ai-msg">{full}▌</div></div>', unsafe_allow_html=True)
-                time.sleep(0.01)
-            placeholder.markdown(f'<div class="chat-container"><div class="chat-msg ai-msg">{full}</div></div>', unsafe_allow_html=True)
-
-            st.session_state.messages.append({"role": "assistant", "content": full})
-            st.rerun()
-
-    # --- NEWS MODE ---
-    elif st.session_state.mode == "news":
-        query = st.text_input("Search news")
-        if query:
-            with st.spinner("Fetching..."):
-                result = karzon_turbo(f"Latest news about: {query}")
-                st.markdown(f'<div class="card">{result}</div>', unsafe_allow_html=True)
-
-    # --- IMAGE MODE ---
-    elif st.session_state.mode == "image":
-        p = st.text_input("Describe image")
-        if st.button("Generate Image"):
-            with st.spinner("Creating..."):
-                st.image(generate_image(p), use_column_width=True)
-
-    st.markdown('<div class="footer">© 2026 KARZON AI - VED PRAKASH</div>', unsafe_allow_html=True)
