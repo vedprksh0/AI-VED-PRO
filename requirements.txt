@@ -1,5 +1,7 @@
 streamlit
 groq
-tavily-python
-python-dotenv
+google-generativeai
 supabase
+duckduckgo-search
+pandas
+python-dotenv
